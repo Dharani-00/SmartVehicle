@@ -1,0 +1,13 @@
+{
+  "speed_mae_ms": 0.5282644500546508,
+  "speed_rmse_ms": 0.8607142506776183,
+  "position_mae_m": 42.85407156879565,
+  "position_rmse_m": 49.28103261198103,
+  "max_position_error_m": 68.50048806542173,
+  "final_position_error_m": 68.39532605632915,
+  "gt_total_distance_m": 509.8314108529858,
+  "dr_total_distance_m": 374.96334225684404,
+  "distance_error_pct": 26.45346397360992,
+  "gnss_denied_mae_m": 29.770439132917907,
+  "gnss_denied_max_error_m": 59.7195007144093
+}

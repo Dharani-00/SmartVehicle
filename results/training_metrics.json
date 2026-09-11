@@ -1,0 +1,11 @@
+{
+  "test_mae_ms": 0.3744383156299591,
+  "test_rmse_ms": 0.5398790240287781,
+  "test_loss_mse": 0.2914693355560303,
+  "train_samples": 5865,
+  "val_samples": 1257,
+  "test_samples": 1257,
+  "epochs_trained": 20,
+  "final_train_loss": 0.2986120581626892,
+  "final_val_loss": 0.2779635488986969
+}

@@ -1,0 +1,23 @@
+{
+  "speed_mae_mps": 1.4698282480239868,
+  "speed_rmse_mps": 1.99735689163208,
+  "speed_mape_pct": 27.281131744384766,
+  "speed_mae_kmh": 5.291381359100342,
+  "speed_rmse_kmh": 7.190484523773193,
+  "gt_total_distance_m": 9373.40647638767,
+  "dr_total_distance_m": 9645.026112956451,
+  "distance_error_pct": 2.8977686740995576,
+  "final_position_error_m": 305.537464996765,
+  "max_position_error_m": 305.81753950803574,
+  "mean_position_error_m": 180.9112647397329,
+  "drift_percentage": 3.2596203500449623,
+  "gnss_outage_duration_s": 120.0,
+  "gnss_outage_mean_error_m": 38.73010455833473,
+  "gnss_outage_max_error_m": 73.29169808813904,
+  "epochs_trained": 12,
+  "dataset": "IO-VNBD S1",
+  "train_fraction": 0.7,
+  "n_samples": 51746,
+  "duration_min": 86.24164999999999,
+  "sample_rate_hz": 10.000000000009095
+}

@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IDR Navigation - AI Dead Reckoning Demo</title>
+    <link rel="stylesheet" href="/static/css/leaflet.css" />
+    <script src="/static/js/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0a0e1a;
+            color: #e0e6ed;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1f36, #0d1321);
+            padding: 12px 24px;
+            border-bottom: 1px solid #2a3050;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #fff;
+            letter-spacing: 0.5px;
+        }
+        .header .subtitle {
+            font-size: 0.75rem;
+            color: #7a8599;
+        }
+        .main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        #map {
+            flex: 1;
+            min-height: 300px;
+        }
+        .sidebar {
+            width: 340px;
+            background: #0f1322;
+            border-left: 1px solid #2a3050;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .main { flex-direction: column-reverse; }
+            .sidebar {
+                width: 100%;
+                max-height: 45vh;
+                border-left: none;
+                border-top: 1px solid #2a3050;
+                padding: 12px;
+                gap: 10px;
+            }
+            #map { flex: 1; min-height: 55vh; }
+            .header { padding: 8px 16px; }
+            .header h1 { font-size: 1.1rem; }
+        }
+        .panel {
+            background: #161b2e;
+            border: 1px solid #2a3050;
+            border-radius: 8px;
+            padding: 14px;
+        }
+        .panel-title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #5a6580;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        .search-box {
+            display: flex;
+            gap: 6px;
+        }
+        .search-box input {
+            flex: 1;
+            background: #0a0e1a;
+            border: 1px solid #2a3050;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #e0e6ed;
+            font-size: 0.85rem;
+            outline: none;
+        }
+        .search-box input:focus { border-color: #4a7cff; }
+        .search-box button {
+            padding: 8px 14px;
+            background: #4a7cff;
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .search-box button:hover { background: #3a6aee; }
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .status-item {
+            background: #0a0e1a;
+            border-radius: 6px;
+            padding: 10px;
+            text-align: center;
+        }
+        .status-item.full { grid-column: 1 / -1; }
+        .status-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #5a6580;
+            margin-bottom: 4px;
+        }
+        .status-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #fff;
+        }
+        .status-value.green { color: #4ade80; }
+        .status-value.red { color: #f87171; }
+        .status-value.orange { color: #fbbf24; }
+        .status-value.blue { color: #60a5fa; }
+
+        .mode-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        .mode-badge.gnss-fusion {
+            background: rgba(74, 222, 128, 0.15);
+            color: #4ade80;
+            border: 1px solid rgba(74, 222, 128, 0.3);
+        }
+        .mode-badge.dead-reckoning {
+            background: rgba(248, 113, 113, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(248, 113, 113, 0.3);
+        }
+        .mode-badge.gnss-recovery {
+            background: rgba(251, 191, 36, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.3);
+        }
+        .mode-badge.idle {
+            background: rgba(100, 116, 139, 0.15);
+            color: #94a3b8;
+            border: 1px solid rgba(100, 116, 139, 0.3);
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .btn {
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.8rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.15s;
+        }
+        .btn:hover { transform: translateY(-1px); }
+        .btn:active { transform: translateY(0); }
+        .btn-start { background: #4a7cff; color: #fff; }
+        .btn-gnss-loss { background: #dc2626; color: #fff; }
+        .btn-gnss-restore { background: #16a34a; color: #fff; }
+        .btn-reset { background: #374151; color: #e0e6ed; }
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .gnss-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+        .gnss-indicator.connected {
+            background: rgba(74, 222, 128, 0.1);
+            color: #4ade80;
+        }
+        .gnss-indicator.lost {
+            background: rgba(248, 113, 113, 0.1);
+            color: #f87171;
+        }
+        .gnss-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .gnss-dot.connected {
+            background: #4ade80;
+            box-shadow: 0 0 8px #4ade80;
+            animation: pulse-green 1.5s infinite;
+        }
+        .gnss-dot.lost {
+            background: #f87171;
+            box-shadow: 0 0 8px #f87171;
+            animation: pulse-red 0.8s infinite;
+        }
+        @keyframes pulse-green {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .search-result {
+            font-size: 0.75rem;
+            color: #7a8599;
+            margin-top: 6px;
+            min-height: 18px;
+        }
+        .search-result.error { color: #f87171; }
+        .search-result.success { color: #4ade80; }
+
+        .ai-indicator {
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .ai-indicator.active {
+            background: rgba(251, 191, 36, 0.1);
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.2);
+        }
+        .ai-indicator.inactive {
+            background: rgba(100, 116, 139, 0.1);
+            color: #64748b;
+            border: 1px solid rgba(100, 116, 139, 0.2);
+        }
+
+        .offline-banner {
+            display: none;
+            background: #92400e;
+            color: #fef3c7;
+            text-align: center;
+            padding: 4px 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .offline-banner.visible { display: block; }
+    </style>
+</head>
+<body>
+    <div class="offline-banner" id="offline-banner">OFFLINE — Map tiles cached, navigation continues via AI Dead Reckoning</div>
+    <div class="header">
+        <div>
+            <h1>IDR NAVIGATION</h1>
+            <div class="subtitle">AI Dead Reckoning + GNSS/INS Fusion | SIH Prototype</div>
+        </div>
+        <div id="mode-display">
+            <span class="mode-badge idle" id="mode-badge">IDLE</span>
+        </div>
+    </div>
+
+    <div class="main">
+        <div id="map"></div>
+        <div class="sidebar">
+            <div class="panel">
+                <div class="panel-title">Destination</div>
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Place name or lat,lon">
+                    <button onclick="searchDestination()">GO</button>
+                </div>
+                <div class="search-result" id="search-result"></div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">Signal Status</div>
+                <div class="gnss-indicator connected" id="gnss-indicator">
+                    <div class="gnss-dot connected" id="gnss-dot"></div>
+                    <span id="gnss-text">GNSS CONNECTED</span>
+                </div>
+                <div class="ai-indicator inactive" id="ai-indicator" style="margin-top: 8px;">
+                    AI DEAD RECKONING: INACTIVE
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">Navigation</div>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <div class="status-label">Speed</div>
+                        <div class="status-value blue" id="speed-val">0 km/h</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">Heading</div>
+                        <div class="status-value" id="heading-val">0&deg;</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">Travelled</div>
+                        <div class="status-value green" id="travelled-val">0.00 km</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">Remaining</div>
+                        <div class="status-value orange" id="remaining-val">0.00 km</div>
+                    </div>
+                    <div class="status-item full">
+                        <div class="status-label">Total Route</div>
+                        <div class="status-value" id="total-val">0.00 km</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">Demo Controls</div>
+                <div class="controls">
+                    <button class="btn btn-start" id="btn-start" onclick="startDemo()">
+                        START DEMO
+                    </button>
+                    <button class="btn btn-start" id="btn-live" onclick="startLive()" style="background:#16a34a;">
+                        START LIVE
+                    </button>
+                    <button class="btn btn-gnss-loss" id="btn-gnss-loss" onclick="gnssLoss()" disabled>
+                        SIMULATE GNSS LOSS (TUNNEL)
+                    </button>
+                    <button class="btn btn-gnss-restore" id="btn-gnss-restore" onclick="gnssRestore()" disabled>
+                        RESTORE GNSS
+                    </button>
+                    <button class="btn btn-reset" id="btn-reset" onclick="resetDemo()">
+                        RESET
+                    </button>
+                </div>
+                <div id="gps-status" style="display:none; margin-top:8px; padding:6px 10px; border-radius:4px; font-size:12px; font-weight:600;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        // -------------------------------------------------------------------
+        // Service Worker registration
+        // -------------------------------------------------------------------
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                .then(function() { console.log('[SW] registered'); })
+                .catch(function(err) { console.log('[SW] registration failed:', err); });
+        }
+
+        // -------------------------------------------------------------------
+        // Offline banner
+        // -------------------------------------------------------------------
+        var offlineBanner = document.getElementById('offline-banner');
+        var isOnline = navigator.onLine;
+
+        function updateOnlineStatus() {
+            isOnline = navigator.onLine;
+            if (isOnline) {
+                offlineBanner.classList.remove('visible');
+            } else {
+                offlineBanner.classList.add('visible');
+            }
+        }
+        window.addEventListener('online', function() {
+            updateOnlineStatus();
+            safeFetch('/api/gnss/restore', { method: 'POST' });
+        });
+        window.addEventListener('offline', function() {
+            updateOnlineStatus();
+            safeFetch('/api/gnss/loss', { method: 'POST' });
+        });
+        updateOnlineStatus();
+
+        // -------------------------------------------------------------------
+        // Safe fetch wrapper — never throws, returns null on failure
+        // -------------------------------------------------------------------
+        function safeFetch(url, opts) {
+            opts = opts || {};
+            var timeout = opts.timeout || 5000;
+            delete opts.timeout;
+
+            var controller = new AbortController();
+            opts.signal = controller.signal;
+            var timer = setTimeout(function() { controller.abort(); }, timeout);
+
+            return fetch(url, opts)
+                .then(function(r) {
+                    clearTimeout(timer);
+                    if (!r.ok) return null;
+                    return r.json();
+                })
+                .catch(function() {
+                    clearTimeout(timer);
+                    return null;
+                });
+        }
+
+        // -------------------------------------------------------------------
+        // Map setup — local Leaflet, no CDN
+        // -------------------------------------------------------------------
+        var map = L.map('map', { zoomControl: true, attributionControl: true })
+            .setView([20.5, 78.9], 5);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19,
+            crossOrigin: true
+        }).addTo(map);
+
+        // -------------------------------------------------------------------
+        // Tile pre-caching helper
+        // -------------------------------------------------------------------
+        function cacheTilesAroundPoint(lat, lon, zoom, radius) {
+            if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+            radius = radius || 3;
+            var tiles = [];
+            var n = Math.pow(2, zoom);
+            var cx = Math.floor((lon + 180) / 360 * n);
+            var cy = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n);
+            var subs = ['a', 'b', 'c'];
+            for (var dx = -radius; dx <= radius; dx++) {
+                for (var dy = -radius; dy <= radius; dy++) {
+                    var tx = cx + dx;
+                    var ty = cy + dy;
+                    if (tx >= 0 && tx < n && ty >= 0 && ty < n) {
+                        var s = subs[(tx + ty) % 3];
+                        tiles.push('https://' + s + '.tile.openstreetmap.org/' + zoom + '/' + tx + '/' + ty + '.png');
+                    }
+                }
+            }
+            navigator.serviceWorker.controller.postMessage({ type: 'CACHE_TILES', tiles: tiles });
+        }
+
+        // -------------------------------------------------------------------
+        // Markers and layers
+        // -------------------------------------------------------------------
+        var vehicleMarker = null;
+        var startMarker = null;
+        var destMarker = null;
+        var routeLine = null;
+        var travelledLine = null;
+        var drLine = null;
+        var pollInterval = null;
+        var gpsWatchId = null;
+
+        // Smoothed position for marker
+        var smoothLat = null;
+        var smoothLon = null;
+        var smoothHeading = null;
+        var SMOOTH_FACTOR = 0.35;
+
+        function makeVehicleIcon(heading, isDR) {
+            var color = isDR ? '#f87171' : '#4a7cff';
+            var shadow = isDR ? 'rgba(248,113,113,0.8)' : 'rgba(74,124,255,0.6)';
+            var anim = isDR ? 'animation: pulse-red 0.8s infinite;' : '';
+            return L.divIcon({
+                html: '<div style="width:24px;height:24px;position:relative;">' +
+                    '<div style="width:20px;height:20px;background:' + color +
+                    ';border:3px solid #fff;border-radius:50%;box-shadow:0 0 12px ' + shadow +
+                    ';' + anim + 'position:absolute;top:2px;left:2px;"></div>' +
+                    '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:10px solid ' + color +
+                    ';position:absolute;top:-6px;left:7px;transform:rotate(' + heading + 'deg);transform-origin:center 16px;"></div></div>',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12],
+                className: ''
+            });
+        }
+
+        var startIcon = L.divIcon({
+            html: '<div style="width:14px;height:14px;background:#4ade80;border:2px solid #fff;border-radius:50%;"></div>',
+            iconSize: [14, 14], iconAnchor: [7, 7], className: ''
+        });
+
+        var destIcon = L.divIcon({
+            html: '<div style="width:14px;height:14px;background:#f59e0b;border:2px solid #fff;border-radius:3px;"></div>',
+            iconSize: [14, 14], iconAnchor: [7, 7], className: ''
+        });
+
+        // -------------------------------------------------------------------
+        // Startup — get user location and set start
+        // -------------------------------------------------------------------
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    var lat = pos.coords.latitude;
+                    var lon = pos.coords.longitude;
+                    setLocationAsStart(lat, lon);
+                    cacheTilesAroundPoint(lat, lon, 16, 5);
+                    cacheTilesAroundPoint(lat, lon, 15, 3);
+                },
+                function() {
+                    showGpsStatus('Location unavailable — tap START LIVE to retry', 'yellow');
+                    loadRoute();
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+            );
+        } else {
+            loadRoute();
+        }
+
+        function setLocationAsStart(lat, lon) {
+            safeFetch('/api/set_start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lat: lat, lon: lon })
+            }).then(function() {
+                map.setView([lat, lon], 16);
+                if (startMarker) map.removeLayer(startMarker);
+                startMarker = L.marker([lat, lon], { icon: startIcon }).addTo(map);
+                loadRoute();
+            });
+        }
+
+        function loadRoute() {
+            safeFetch('/api/route').then(function(data) {
+                if (!data || !data.route || data.route.length === 0) return;
+                if (routeLine) map.removeLayer(routeLine);
+                routeLine = L.polyline(data.route, {
+                    color: '#4a7cff', weight: 3, opacity: 0.6, dashArray: '8, 6'
+                }).addTo(map);
+
+                var s = data.route[0];
+                var e = data.route[data.route.length - 1];
+
+                if (startMarker) map.removeLayer(startMarker);
+                startMarker = L.marker(s, { icon: startIcon }).addTo(map).bindPopup('Start');
+
+                if (destMarker) map.removeLayer(destMarker);
+                destMarker = L.marker(e, { icon: destIcon }).addTo(map).bindPopup('Destination');
+
+                map.fitBounds(routeLine.getBounds().pad(0.15));
+
+                if (data.total_distance) {
+                    document.getElementById('total-val').textContent =
+                        (data.total_distance / 1000).toFixed(2) + ' km';
+                }
+
+                // Cache tiles along the route
+                if (navigator.onLine && data.route.length > 0) {
+                    var step = Math.max(1, Math.floor(data.route.length / 20));
+                    for (var i = 0; i < data.route.length; i += step) {
+                        cacheTilesAroundPoint(data.route[i][0], data.route[i][1], 16, 2);
+                    }
+                }
+            });
+        }
+
+        // -------------------------------------------------------------------
+        // Demo controls
+        // -------------------------------------------------------------------
+        window.startDemo = function() {
+            var btn = document.getElementById('btn-start');
+            btn.textContent = 'STARTING...';
+            btn.disabled = true;
+            safeFetch('/api/start', { method: 'POST' }).then(function(data) {
+                if (data && data.success) {
+                    btn.textContent = 'RUNNING';
+                    document.getElementById('btn-live').disabled = true;
+                    document.getElementById('btn-gnss-loss').disabled = false;
+                    smoothLat = null;
+                    smoothLon = null;
+                    smoothHeading = null;
+                    startPolling();
+                    setTimeout(function() {
+                        safeFetch('/api/status').then(function(s) {
+                            if (s && s.latitude && s.longitude) {
+                                map.setView([s.latitude, s.longitude], 16);
+                                cacheTilesAroundPoint(s.latitude, s.longitude, 16, 5);
+                            }
+                        });
+                    }, 500);
+                } else {
+                    btn.textContent = 'START DEMO';
+                    btn.disabled = false;
+                    showGpsStatus((data && data.message) || 'Could not start demo', 'red');
+                }
+            });
+        };
+
+        window.gnssLoss = function() {
+            safeFetch('/api/gnss/loss', { method: 'POST' }).then(function(data) {
+                if (data && data.success) {
+                    document.getElementById('btn-gnss-loss').disabled = true;
+                    document.getElementById('btn-gnss-restore').disabled = false;
+                }
+            });
+        };
+
+        window.gnssRestore = function() {
+            safeFetch('/api/gnss/restore', { method: 'POST' }).then(function(data) {
+                if (data && data.success) {
+                    document.getElementById('btn-gnss-restore').disabled = true;
+                    document.getElementById('btn-gnss-loss').disabled = false;
+                    smoothLat = null;
+                    smoothLon = null;
+                }
+            });
+        };
+
+        window.resetDemo = function() {
+            if (gpsWatchId !== null) {
+                navigator.geolocation.clearWatch(gpsWatchId);
+                gpsWatchId = null;
+            }
+            safeFetch('/api/reset', { method: 'POST' }).then(function() {
+                stopPolling();
+                var btnStart = document.getElementById('btn-start');
+                btnStart.disabled = false;
+                btnStart.textContent = 'START DEMO';
+                document.getElementById('btn-live').disabled = false;
+                document.getElementById('btn-gnss-loss').disabled = true;
+                document.getElementById('btn-gnss-restore').disabled = true;
+                document.getElementById('gps-status').style.display = 'none';
+                if (vehicleMarker) { map.removeLayer(vehicleMarker); vehicleMarker = null; }
+                if (travelledLine) { map.removeLayer(travelledLine); travelledLine = null; }
+                if (drLine) { map.removeLayer(drLine); drLine = null; }
+                smoothLat = null; smoothLon = null; smoothHeading = null;
+                updateUI({
+                    mode: 'IDLE', gnss_available: true, speed: 0,
+                    heading: 0, distance_travelled: 0, distance_remaining: 0,
+                    total_distance: 0
+                });
+                loadRoute();
+            });
+        };
+
+        // -------------------------------------------------------------------
+        // Live mode
+        // -------------------------------------------------------------------
+        window.startLive = function() {
+            if (!navigator.geolocation) {
+                showGpsStatus('Geolocation API not available on this device/browser', 'red');
+                return;
+            }
+            showGpsStatus('Getting GPS fix...', 'yellow');
+
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    var lat = pos.coords.latitude;
+                    var lon = pos.coords.longitude;
+                    cacheTilesAroundPoint(lat, lon, 17, 5);
+                    safeFetch('/api/set_start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ lat: lat, lon: lon })
+                    }).then(function() {
+                        map.setView([lat, lon], 17);
+                        safeFetch('/api/start_live', { method: 'POST' }).then(function(data) {
+                            if (data && data.success) {
+                                document.getElementById('btn-start').disabled = true;
+                                document.getElementById('btn-live').disabled = true;
+                                document.getElementById('btn-gnss-loss').disabled = false;
+                                smoothLat = null; smoothLon = null; smoothHeading = null;
+                                startPolling();
+                                beginGpsWatch();
+                            }
+                        });
+                    });
+                },
+                function() {
+                    showGpsStatus('No initial GPS fix, starting anyway...', 'yellow');
+                    safeFetch('/api/start_live', { method: 'POST' }).then(function(data) {
+                        if (data && data.success) {
+                            document.getElementById('btn-start').disabled = true;
+                            document.getElementById('btn-live').disabled = true;
+                            document.getElementById('btn-gnss-loss').disabled = false;
+                            startPolling();
+                            beginGpsWatch();
+                        }
+                    });
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+            );
+        };
+
+        function beginGpsWatch() {
+            var firstFix = true;
+            gpsWatchId = navigator.geolocation.watchPosition(
+                function(pos) {
+                    showGpsStatus('GPS active — accuracy: ' + Math.round(pos.coords.accuracy) + 'm', 'green');
+                    var lat = pos.coords.latitude;
+                    var lon = pos.coords.longitude;
+
+                    if (firstFix) {
+                        firstFix = false;
+                        safeFetch('/api/set_start', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lat: lat, lon: lon })
+                        });
+                        map.setView([lat, lon], 17);
+                        cacheTilesAroundPoint(lat, lon, 17, 5);
+                    }
+
+                    safeFetch('/api/gps_update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            lat: lat, lon: lon,
+                            speed: pos.coords.speed,
+                            heading: pos.coords.heading,
+                            accuracy: pos.coords.accuracy
+                        }),
+                        timeout: 3000
+                    });
+                },
+                function(err) {
+                    var msg = 'GPS error: ';
+                    if (err.code === 1) msg += 'Permission denied — allow location access';
+                    else if (err.code === 2) msg += 'Position unavailable';
+                    else if (err.code === 3) msg += 'Timeout — no GPS fix yet';
+                    else msg += err.message;
+                    showGpsStatus(msg, 'red');
+                    if (err.code === 2 || err.code === 3) {
+                        safeFetch('/api/gnss/loss', { method: 'POST' });
+                    }
+                },
+                { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+            );
+        }
+
+        function showGpsStatus(msg, color) {
+            var el = document.getElementById('gps-status');
+            el.style.display = 'block';
+            el.textContent = msg;
+            el.style.background = color === 'red' ? '#fecaca' : color === 'green' ? '#bbf7d0' : '#fef9c3';
+            el.style.color = color === 'red' ? '#991b1b' : color === 'green' ? '#166534' : '#854d0e';
+        }
+        window.showGpsStatus = showGpsStatus;
+
+        // -------------------------------------------------------------------
+        // Polling loop
+        // -------------------------------------------------------------------
+        function startPolling() {
+            if (pollInterval) clearInterval(pollInterval);
+            var rate = window.innerWidth < 768 ? 300 : 150;
+            pollInterval = setInterval(pollStatus, rate);
+        }
+        function stopPolling() {
+            if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        }
+
+        var pollInFlight = false;
+        function pollStatus() {
+            if (pollInFlight) return;
+            pollInFlight = true;
+            safeFetch('/api/status', { timeout: 3000 }).then(function(data) {
+                pollInFlight = false;
+                if (!data) return;
+                updateUI(data);
+                updateMap(data);
+                if (!data.running && data.mode === 'ARRIVED') {
+                    stopPolling();
+                    document.getElementById('btn-start').disabled = false;
+                    document.getElementById('btn-live').disabled = false;
+                    document.getElementById('btn-gnss-loss').disabled = true;
+                    document.getElementById('btn-gnss-restore').disabled = true;
+                }
+            });
+        }
+
+        // -------------------------------------------------------------------
+        // UI updates
+        // -------------------------------------------------------------------
+        function updateUI(data) {
+            var badge = document.getElementById('mode-badge');
+            badge.textContent = data.mode.replace(/_/g, ' ');
+            badge.className = 'mode-badge';
+            if (data.mode === 'GNSS_FUSION') badge.classList.add('gnss-fusion');
+            else if (data.mode === 'DEAD_RECKONING') badge.classList.add('dead-reckoning');
+            else if (data.mode === 'GNSS_RECOVERY') badge.classList.add('gnss-recovery');
+            else badge.classList.add('idle');
+
+            var gnssInd = document.getElementById('gnss-indicator');
+            var gnssDot = document.getElementById('gnss-dot');
+            var gnssText = document.getElementById('gnss-text');
+            if (data.gnss_available) {
+                gnssInd.className = 'gnss-indicator connected';
+                gnssDot.className = 'gnss-dot connected';
+                gnssText.textContent = 'GNSS CONNECTED';
+            } else {
+                gnssInd.className = 'gnss-indicator lost';
+                gnssDot.className = 'gnss-dot lost';
+                gnssText.textContent = 'GNSS LOST';
+            }
+
+            var aiInd = document.getElementById('ai-indicator');
+            if (data.mode === 'DEAD_RECKONING') {
+                aiInd.className = 'ai-indicator active';
+                aiInd.textContent = 'AI DEAD RECKONING: ACTIVE';
+            } else {
+                aiInd.className = 'ai-indicator inactive';
+                aiInd.textContent = 'AI DEAD RECKONING: INACTIVE';
+            }
+
+            document.getElementById('speed-val').textContent =
+                (data.speed * 3.6).toFixed(0) + ' km/h';
+            document.getElementById('heading-val').textContent =
+                data.heading.toFixed(0) + '°';
+            document.getElementById('travelled-val').textContent =
+                (data.distance_travelled / 1000).toFixed(2) + ' km';
+            document.getElementById('remaining-val').textContent =
+                (data.distance_remaining / 1000).toFixed(2) + ' km';
+            document.getElementById('total-val').textContent =
+                (data.total_distance / 1000).toFixed(2) + ' km';
+        }
+
+        // -------------------------------------------------------------------
+        // Map updates — smooth marker movement
+        // -------------------------------------------------------------------
+        function updateMap(data) {
+            if (data.latitude == null || data.longitude == null) return;
+            if (data.latitude === 0 && data.longitude === 0) return;
+
+            var rawLat = data.latitude;
+            var rawLon = data.longitude;
+            var rawHeading = data.heading || 0;
+
+            // Smooth position to prevent jitter
+            if (smoothLat === null) {
+                smoothLat = rawLat;
+                smoothLon = rawLon;
+                smoothHeading = rawHeading;
+            } else {
+                smoothLat += (rawLat - smoothLat) * SMOOTH_FACTOR;
+                smoothLon += (rawLon - smoothLon) * SMOOTH_FACTOR;
+                // Smooth heading with wraparound
+                var hDiff = rawHeading - smoothHeading;
+                if (hDiff > 180) hDiff -= 360;
+                if (hDiff < -180) hDiff += 360;
+                smoothHeading = (smoothHeading + hDiff * SMOOTH_FACTOR + 360) % 360;
+            }
+
+            var pos = [smoothLat, smoothLon];
+            var isDR = !data.gnss_available;
+
+            var icon = makeVehicleIcon(smoothHeading, isDR);
+            if (!vehicleMarker) {
+                vehicleMarker = L.marker(pos, { icon: icon, zIndexOffset: 1000 }).addTo(map);
+            } else {
+                vehicleMarker.setLatLng(pos);
+                vehicleMarker.setIcon(icon);
+            }
+
+            if (data.travelled_path && data.travelled_path.length > 1) {
+                if (travelledLine) map.removeLayer(travelledLine);
+                travelledLine = L.polyline(data.travelled_path, {
+                    color: '#4ade80', weight: 3, opacity: 0.7
+                }).addTo(map);
+            }
+            if (data.dr_path && data.dr_path.length > 1) {
+                if (drLine) map.removeLayer(drLine);
+                drLine = L.polyline(data.dr_path, {
+                    color: '#f87171', weight: 4, opacity: 0.9
+                }).addTo(map);
+            }
+
+            if (data.running) {
+                map.panTo(pos, { animate: true, duration: 0.3 });
+            }
+        }
+
+        // -------------------------------------------------------------------
+        // Search
+        // -------------------------------------------------------------------
+        window.searchDestination = function() {
+            var query = document.getElementById('search-input').value.trim();
+            if (!query) return;
+
+            var resultEl = document.getElementById('search-result');
+            resultEl.textContent = 'Searching...';
+            resultEl.className = 'search-result';
+
+            if (!navigator.onLine) {
+                // Try parsing as coordinates even offline
+                if (query.indexOf(',') !== -1) {
+                    var parts = query.split(',');
+                    var lat = parseFloat(parts[0]);
+                    var lon = parseFloat(parts[1]);
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                        safeFetch('/api/search', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query: query })
+                        }).then(function(data) {
+                            if (data && data.success) {
+                                resultEl.textContent = data.name;
+                                resultEl.className = 'search-result success';
+                                if (destMarker) map.removeLayer(destMarker);
+                                destMarker = L.marker([data.lat, data.lon], { icon: destIcon }).addTo(map).bindPopup(data.name);
+                                setTimeout(loadRoute, 500);
+                            } else {
+                                resultEl.textContent = 'Offline — enter coordinates as lat,lon';
+                                resultEl.className = 'search-result error';
+                            }
+                        });
+                        return;
+                    }
+                }
+                resultEl.textContent = 'Offline — enter coordinates as lat,lon';
+                resultEl.className = 'search-result error';
+                return;
+            }
+
+            safeFetch('/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: query }),
+                timeout: 10000
+            }).then(function(data) {
+                if (data && data.success) {
+                    resultEl.textContent = data.name;
+                    resultEl.className = 'search-result success';
+                    if (destMarker) map.removeLayer(destMarker);
+                    destMarker = L.marker([data.lat, data.lon], { icon: destIcon }).addTo(map).bindPopup(data.name);
+                    setTimeout(loadRoute, 500);
+                } else {
+                    resultEl.textContent = (data && data.message) || 'Search failed';
+                    resultEl.className = 'search-result error';
+                }
+            });
+        };
+
+        document.getElementById('search-input').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') searchDestination();
+        });
+
+        // -------------------------------------------------------------------
+        // Map resize fix
+        // -------------------------------------------------------------------
+        window.addEventListener('resize', function() {
+            setTimeout(function() { map.invalidateSize(); }, 100);
+        });
+        setTimeout(function() { map.invalidateSize(); }, 500);
+
+    })();
+    </script>
+</body>
+</html>
